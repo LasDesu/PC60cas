@@ -11,52 +11,50 @@ static char *infile = NULL;
 static char *outfile= NULL;
 
 static int play = 0;
-static int square = 0;
 
 static int filetype = -1;
-static int baud = 1200;
 
-static struct tape_block *blocks;
-static struct tape_block **last_block = &blocks;
+struct emu_tape_block *emu_tape_blocks = NULL;
 
-struct tape_block *tape_std_block()
+void emu_tape_clear()
 {
-	struct tape_block *block;
+	struct emu_tape_block *b = NULL;
 
-	block = calloc( 1, sizeof(*block) );
-	if ( !block )
-		return NULL;
-
-	block->baud = baud;
-
-	block->silence = 500;
-	block->pilot = 4000;
-	block->tail = 10;
-
-	return block;
-}
-
-void tape_add_block( struct tape_block *block )
-{
-	*last_block = block;
-	block->next = NULL;
-	last_block = &block->next;
-}
-
-static void print_blocks( const unsigned char *origin, struct tape_block *b )
-{
-	int i;
-
-	for ( i = 0; b; b = b->next, i ++ )
+	b = emu_tape_blocks;
+	while ( b )
 	{
-		printf( "Block #%d:", i + 1 );
-		if ( b->name[0] )
-			printf( " \"%s\"\n", b->name );
+		struct emu_tape_block *tmp = b;
+
+		if ( b->name )
+			free( b->name );
+		b = b->next;
+
+		if ( tmp->fini )
+			tmp->fini( tmp );
 		else
-			printf( "\n" );
-		printf( "  offset: 0x%X\n", (unsigned)(b->data - origin) );
-		printf( "  size:   %d bytes\n", b->size );
+			free( tmp );
 	}
+	emu_tape_blocks = NULL;
+}
+
+void emu_tape_add( struct emu_tape_block *blk )
+{
+	struct emu_tape_block *b = NULL;
+
+	blk->next = NULL;
+
+	if ( !emu_tape_blocks )
+	{
+		emu_tape_blocks = blk;
+		return;
+	}
+
+	b = emu_tape_blocks;
+	while ( b->next )
+	{
+		b = b->next;
+	}
+	b->next = blk;
 }
 
 static const char *get_file_ext( char *name )
@@ -80,15 +78,12 @@ static int process_options( int argc, char *argv[] )
 {
 	int c;
 
-	while( ( c = getopt( argc, argv, "t:ipb:s" ) ) != -1 )
+	while( ( c = getopt( argc, argv, "t:ips" ) ) != -1 )
 	{
 		switch( c )
 		{
 			case 't':
 				filetype = atoi( optarg );
-				break;
-			case 'b':
-				baud = atoi( optarg );
 				break;
 			case 'i':
 				invert_sound = 1;
@@ -97,7 +92,7 @@ static int process_options( int argc, char *argv[] )
 				play = 1;
 				break;
 			case 's':
-				square = 1;
+				waveform = 1;
 				break;
 		}
 	}
@@ -111,7 +106,7 @@ static int process_options( int argc, char *argv[] )
 	infile = argv[ optind ++ ];
 
 	/* check if file type is valid */
-	if ( (filetype > 2) || (filetype < -1) )
+	if ( (filetype > 1) || (filetype < -1) )
 	{
 		fprintf( stderr, "Invalid file type (%d)!\n", filetype );
 		return -1;
@@ -153,51 +148,13 @@ static int process_options( int argc, char *argv[] )
 
 int main( int argc, char *argv[] )
 {
-	FILE *fp = NULL;
-	unsigned char *data = NULL;
-	long datasize;
 	int rc = 0;
+
+	waveform = 0;
+	invert_sound = 0;
 
 	if ( process_options( argc, argv ) )
 		return -1;
-
-	fp = fopen( infile, "rb" );
-	if ( !fp )
-	{
-		fprintf( stderr, "Failed to open '%s'!\n", infile );
-		return -1;
-	}
-
-	/* get file size */
-	fseek( fp, 0, SEEK_END );
-	datasize = ftell( fp );
-
-	if ( datasize > 64*1024*1024 )
-	{
-		fprintf( stderr, "Input file too big! Can't be P6 cassette.\n" );
-		rc = -1;
-		goto out;
-	}
-
-	/* read data */
-	data = malloc( datasize );
-	if ( !data )
-	{
-		fprintf( stderr, "Failed to allocate memory for data (%d).\n", errno );
-		rc = -1;
-		goto out;
-	}
-
-	fseek( fp, 0, SEEK_SET );
-	if ( fread( data, 1, datasize, fp ) != datasize )
-	{
-		fprintf( stderr, "Failed to read all data from file (%d).\n", errno );
-		rc = -1;
-		goto out;
-	}
-
-	fclose( fp );
-	fp = NULL;
 
 	/* process file */
 	if ( filetype < 0 )
@@ -207,12 +164,10 @@ int main( int argc, char *argv[] )
 
 		if ( ext )
 		{
-			if ( strcasecmp( ext, "p6" ) == 0 )
+			if ( strcasecmp( ext, "tap" ) == 0 )
+				filetype = 0;
+			else if ( strcasecmp( ext, "tzx" ) == 0 )
 				filetype = 1;
-			else if ( strcasecmp( ext, "cas" ) == 0 )
-				filetype = 1;
-			else if ( strcasecmp( ext, "p6t" ) == 0 )
-				filetype = 2;
 		}
 		
 		if ( filetype < 0 )
@@ -226,37 +181,31 @@ int main( int argc, char *argv[] )
 	switch ( filetype )
 	{
 		case 0:
-			printf( "Processing raw data file...\n" );
-			process_raw( data, datasize );
+			printf( "Processing TAP file...\n" );
+			load_tap( infile );
 			break;
 		case 1:
-			printf( "Processing BASIC file...\n" );
-			process_basic( data, datasize );
+			printf( "Processing TZX file...\n" );
+			load_tzx( infile );
 			break;
 		default:
 			fprintf( stderr, "File type not yet supported.\n" );
 			break;
 	}
 
-	if ( !blocks )
+	if ( !emu_tape_blocks )
 	{
 		fprintf( stderr, "No blocks processed.\n" );
 		rc = -1;
 		goto out;
 	}
-	else
-		print_blocks( data, blocks );
 
 	if ( !play )
-		produce_wav( outfile, blocks, square );
+		produce_wav( outfile, emu_tape_blocks );
 	/*else
-		play_tape( blocks );*/
+		play_tape( emu_tape_blocks );*/
 
 out:
-	if ( data )
-		free( data );
-	if ( fp )
-		fclose( fp );
 
 	return rc;
 }
