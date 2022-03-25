@@ -1,8 +1,171 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include "emul.h"
 
 #include "tape.h"
+
+struct pc60_block
+{
+	struct emu_tape_block base;
+
+	const unsigned char *data;
+	unsigned size;
+	char name[7];
+
+	unsigned baud;
+	unsigned silence;
+	unsigned pilot;
+	unsigned tail;
+	unsigned stopbits;
+
+	unsigned ts_zero, ts_one;
+
+	int pos;
+	int state;
+	long state_pos;
+	int signal;
+	unsigned char buf;
+};
+
+static void pc60_prepare( struct emu_tape_block *blk )
+{
+	struct pc60_block *b = (struct pc60_block *)blk;
+
+	b->pos = 0;
+	b->state = 0;
+	b->state_pos = 0;
+	b->signal = 0;
+
+	b->ts_zero = cpu_tstates_frame * emu_frame_rate / b->baud / 2;
+	b->ts_one = cpu_tstates_frame * emu_frame_rate / b->baud / 4;
+}
+
+static int pc60_step( struct emu_tape_block *blk )
+{
+	struct pc60_block *b = (struct pc60_block *)blk;
+
+	switch ( b->state )
+	{
+		case 0:
+			// start block
+			if ( b->pos >= b->size )
+				return -1;
+
+			b->state_pos = (long)(b->pilot * b->baud / 500) * 2 - 1;
+			b->signal = 0;
+			b->state ++;
+			return cpu_tstates_frame * 50 * b->silence / 1000;
+		case 1:
+			b->signal = !b->signal;
+			if ( --b->state_pos == 0 )
+				b->state ++;
+			return b->ts_one;
+		
+		case 2:
+			if ( b->pos >= b->size )
+			{
+				b->state = 0;
+				b->signal = 1;
+				return -1;
+			}
+			b->signal = 0;
+			b->state ++;
+			return b->ts_zero;
+		case 3:
+			b->signal = 1;
+			b->state ++;
+			b->state_pos = 0;
+			b->buf = b->data[b->pos ++];
+			return b->ts_zero;
+
+		case 4:
+			b->signal = 0;
+			if ( b->buf & 1 )
+			{
+				b->state = 6;
+				return b->ts_one;
+			}
+			b->state = 5;
+			return b->ts_zero;
+
+		case 5:
+			b->signal = 1;
+			b->state_pos ++;
+			b->buf >>= 1;
+			if ( b->state_pos < 8 )
+				b->state = 4;
+			else
+				b->state = 9;
+			return b->ts_zero;
+		case 6:
+		case 7:
+			b->signal = !b->signal;
+			b->state ++;
+			return b->ts_one;
+		case 8:
+			b->signal = 1;
+			b->state_pos ++;
+			b->buf >>= 1;
+			if ( b->state_pos < 8 )
+				b->state = 4;
+			else
+				b->state = 9;
+			return b->ts_one;
+
+		case 9:
+			b->signal = 0;
+			b->state ++;
+			b->state_pos = b->stopbits * 4 - 1;
+			if ( (b->pos & 1) == 0 )
+				b->state_pos += 4;
+			return b->ts_one;
+		case 10:
+			b->signal = !b->signal;
+			if ( --b->state_pos == 0 )
+			{
+				if ( (b->pos >= b->size) && b->tail )
+				{
+					b->state = 1;
+					b->state_pos = (long)(b->tail * b->baud / 500) * 2 - 1;
+				}
+				else
+					b->state = 2;
+			}
+			return b->ts_one;
+	}
+
+	return 0;
+}
+
+static int pc60_signal( struct emu_tape_block *blk )
+{
+	struct pc60_block *b = (struct pc60_block *)blk;
+
+	return b->signal;
+}
+
+static struct pc60_block *tape_std_block()
+{
+	struct pc60_block *blk;
+
+	blk = calloc( 1, sizeof(*blk) );
+	if ( !blk )
+		return NULL;
+	
+	blk->base.prepare = pc60_prepare;
+	blk->base.step = pc60_step;
+	blk->base.signal = pc60_signal;
+
+	blk->baud = 1200;
+
+	blk->silence = 500;
+	blk->pilot = 4000;
+	blk->tail = 10;
+	blk->stopbits = 3;
+
+	return blk;
+}
 
 enum
 {
@@ -65,7 +228,7 @@ static int parse_guess_type( const unsigned char *data, long size )
 
 static int parse_basic_block( const unsigned char *data, long size )
 {
-	struct tape_block *block;
+	struct pc60_block *block;
 	long pos = 0;
 	int i;
 	
@@ -95,7 +258,7 @@ static int parse_basic_block( const unsigned char *data, long size )
 	block->size = 10 + 6;	/* 10 bytes header + 6 bytes name */
 	strncpy( block->name, &data[pos], 6 );
 	block->tail = 10;
-	tape_add_block( block );
+	emu_tape_add( &block->base );
 
 	/* move to data */
 	pos += 6;
@@ -153,7 +316,7 @@ static int parse_basic_block( const unsigned char *data, long size )
 		fprintf( stderr, "Bad BASIC block ending\n" );
 
 	block->size = &data[pos] - block->data;
-	tape_add_block( block );
+	emu_tape_add( &block->base );
 
 	if ( pos < size )
 		return pos;
@@ -163,7 +326,7 @@ static int parse_basic_block( const unsigned char *data, long size )
 
 static int parse_hex_block( const unsigned char *data, long size )
 {
-	struct tape_block *block;
+	struct pc60_block *block;
 	long pos = 0;
 	int i;
 	
@@ -192,7 +355,7 @@ static int parse_hex_block( const unsigned char *data, long size )
 	block->size = 6;
 	block->tail = 10;
 	strcpy( block->name, "HEX" );
-	tape_add_block( block );
+	emu_tape_add( &block->base );
 	
 	block = tape_std_block();
 	if ( !block )
@@ -211,7 +374,7 @@ static int parse_hex_block( const unsigned char *data, long size )
 		pos ++;
 	}
 	block->size = pos - 6;
-	tape_add_block( block );
+	emu_tape_add( &block->base );
 
 	if ( pos < size )
 		return pos;
@@ -221,7 +384,7 @@ static int parse_hex_block( const unsigned char *data, long size )
 
 static int parse_raw_block( const unsigned char *data, long size )
 {
-	struct tape_block *block;
+	struct pc60_block *block;
 	long pos = 0;
 	int i;
 	
@@ -248,7 +411,7 @@ static int parse_raw_block( const unsigned char *data, long size )
 				if ( (t == TYPE_BASIC) || (t == TYPE_HEX) )
 				{
 					block->size = pos;
-					tape_add_block( block );
+					emu_tape_add( &block->base );
 					return pos;
 				}
 			}
@@ -257,7 +420,7 @@ static int parse_raw_block( const unsigned char *data, long size )
 	}
 	
 	/* just use all data */
-	tape_add_block( block );
+	emu_tape_add( &block->base );
 
 	return 0;
 }
@@ -305,7 +468,7 @@ int process_basic( const unsigned char *data, long size )
 
 int process_raw( const unsigned char *data, long size )
 {
-	struct tape_block *block;
+	struct pc60_block *block;
 	
 	block = tape_std_block();
 	if ( !block )
@@ -313,7 +476,31 @@ int process_raw( const unsigned char *data, long size )
 
 	block->data = data;
 	block->size = size;
-	tape_add_block( block );
+	emu_tape_add( &block->base );
 	
+	return 0;
+}
+
+int load_pc60cas( const char *flname )
+{
+	FILE *fp;
+	unsigned char *data = NULL;
+	long datasize;
+
+	fp = fopen( flname, "rb" );
+	if ( !fp )
+		return ( -1 );
+
+	fseek( fp, 0, SEEK_END );
+	datasize = ftell( fp );
+	fseek( fp, 0, SEEK_SET );
+
+	data = mem_alloc( datasize );
+	fread( data, datasize, 1, fp );
+
+	fclose( fp );
+
+	process_basic( data, datasize );
+
 	return 0;
 }
