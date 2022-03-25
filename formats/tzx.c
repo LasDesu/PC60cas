@@ -175,7 +175,7 @@ static int signal_tzx( struct emu_tape_block *blk )
 }
 
 static void prepare_block( struct emu_tape_block *blk )
-{printf("std block: %p\n",blk);
+{
 	struct tzx_std_block *b = (struct tzx_std_block *)blk;
 
 	tape_state.state = b->start_state;
@@ -277,7 +277,7 @@ static int process_generator( struct emu_tape_block *blk )
 	struct tzx_generator_block *b = (struct tzx_generator_block *)blk;
 
 	tape_state.signal = !tape_state.signal;
-	if ( tape_state.pos < b->num )
+	if ( (tape_state.pos ++) < b->num )
 		return b->length;
 
 	return -1;
@@ -375,7 +375,7 @@ static struct emu_tape_block *process_b12()
 
 	blk->base.prepare = prepare_block;
 	blk->base.step = process_generator;
-	//blk->base.signal = signal_tzx;
+	blk->base.signal = signal_tzx;
 
 	tape_state.next += sizeof( tape_state.block->b12 );
 
@@ -394,7 +394,7 @@ static struct emu_tape_block *process_b13()
 
 	blk->base.prepare = prepare_block;
 	blk->base.step = process_pulses;
-	//blk->base.signal = signal_tzx;
+	blk->base.signal = signal_tzx;
 
 	tape_state.next += sizeof( tape_state.block->b13 ) + tape_state.block->b13.pulses * 2;
 

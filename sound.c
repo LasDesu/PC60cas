@@ -9,7 +9,7 @@
 #define DEBUG_WAVEWORM 1500
 
 /* common sound stuff */
-static unsigned sample_rate = 44100;
+unsigned sample_rate = 44100;
 int invert_sound = 0;
 int waveform = 0;
 
@@ -72,15 +72,15 @@ static void process_block( struct audio_render *render, struct emu_tape_block *b
 
 	if ( block->prepare )
 		block->prepare( block );
-	
-	while ( 1 )
+
+	while ( block->step )
 	{
 		tstates = block->step( block );
 		if ( tstates < 0 )
 			return;
 
 		period = tstates * 1000.0 / cpu_tstates_frame / emu_frame_rate;
-		if ( period >= 20.0 )
+		if ( !block->signal || (period >= 20.0) )
 			generate_silence( render, period );
 		else
 			generate_tone( render, period, 500.0 / period, block->signal( block ) ? M_PI : 0.0 );
@@ -197,4 +197,54 @@ int produce_wav( const char *outfile, struct emu_tape_block *block )
 	printf( "Wave file '%s' produced\n", outfile );
 
 	return 0;
+}
+
+struct audio_render_play
+{
+	struct audio_render base;
+	emu_sound_out_t *out;
+	unsigned pos;
+};
+
+static void audio_write_sample( struct audio_render *_r, short sample )
+{
+	struct audio_render_play *render = (struct audio_render_play *)_r;
+	SNDFRAME *fr = &sound_buffer[render->pos];
+	
+	fr->l = fr->r = sample;
+
+	if ( (++ render->pos) >= bufferFrames )
+	{
+		render->out->flush();
+		render->pos = 0;
+	}
+}
+
+void play_tape( struct emu_tape_block *block )
+{
+	struct audio_render_play render;
+
+	/* prepare renderer */
+	render.base.output = audio_write_sample;
+	if ( waveform == 0 )
+		render.base.gen = gen_square;
+	else
+		render.base.gen = sinf;	/* sine wave really is overkill, but looks pretty */
+	render.pos = 0;
+
+	render.out = &sound_pulse;
+
+	if ( render.out->init )
+		render.out->init();	
+
+	while ( block )
+	{
+		process_block( &render.base, block );
+		block = block->next;
+	}
+
+	if ( render.out->flush )
+		render.out->flush();	
+	if ( render.out->uninit )
+		render.out->uninit();
 }

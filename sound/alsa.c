@@ -10,14 +10,14 @@ static int sound_alsa_init()
 {
 	int ret;
 	snd_pcm_hw_params_t *hw_params;
-	unsigned rate = 48000;
+	unsigned rate = sample_rate;
 
 	ret = snd_pcm_open( &sndh, "default", SND_PCM_STREAM_PLAYBACK, 0 );
 	if ( ret < 0 )
 	{
 		fprintf (stderr, "cannot open audio device (%s)\n",
 				 snd_strerror (ret));
-		return ( -1 );
+		return -1;
 	}
 
 	snd_pcm_hw_params_malloc( &hw_params );
@@ -30,6 +30,7 @@ static int sound_alsa_init()
 
 	bufferFrames = rate / emu_frame_rate;
 	sound_buffer = calloc( bufferFrames, sizeof(SNDFRAME) );
+	sample_rate = rate;
 
 	snd_pcm_hw_params_set_periods( sndh, hw_params, 8, 0 );
 
@@ -42,7 +43,7 @@ static int sound_alsa_init()
 
 	snd_pcm_start( sndh );
 
-	return ( 0 );
+	return 0;
 }
 
 static int sound_alsa_uninit()
@@ -51,7 +52,7 @@ static int sound_alsa_uninit()
 	snd_rawmidi_close(midiout);
 	free( sound_buffer );
 
-	return ( 0 );
+	return 0;
 }
 
 static int sound_alsa_flush()
@@ -73,33 +74,7 @@ static int sound_alsa_flush()
 
 	memset( sound_buffer, 0, bufferFrames * sizeof( SNDFRAME ) );
 
-	return ( 0 );
-}
-
-int midi_alsa_init()
-{
-	int mode = SND_RAWMIDI_SYNC;
-	const char* portname = "hw:3,0,0";
-	//const char* portname = "hw:2,0";
-	int ret;
-
-	ret = snd_rawmidi_open( NULL, &midiout, portname, mode );
-	if ( ret < 0 )
-	{
-		fprintf( stderr, "Problem opening MIDI output: %s\n", snd_strerror(ret) );
-		return ( -1 );
-	}
-
-	return ( 0 );
-}
-
-void midi_alsa_write( char value )
-{
-	int ret;
-
-	ret = snd_rawmidi_write( midiout, &value, 1 );
-	if ( ret < 0 )
-		fprintf(stderr,"Problem writing to MIDI output: %s", snd_strerror(ret) );
+	return 0;
 }
 
 emu_sound_out_t sound_alsa =

@@ -137,12 +137,6 @@ static int process_options( int argc, char *argv[] )
 		return -1;
 	}
 
-	if ( play )
-	{
-		fprintf( stderr, "Playing is not supported yet!\n" );
-		return -1;
-	}
-
 	return 0;
 }
 
@@ -208,8 +202,8 @@ int main( int argc, char *argv[] )
 
 	if ( !play )
 		produce_wav( outfile, emu_tape_blocks );
-	/*else
-		play_tape( emu_tape_blocks );*/
+	else
+		play_tape( emu_tape_blocks );
 
 out:
 

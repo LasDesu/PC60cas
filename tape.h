@@ -16,5 +16,6 @@ extern int invert_sound;
 extern int waveform;
 
 int produce_wav( const char *outfile, struct emu_tape_block *blocks );
+void play_tape( struct emu_tape_block *block );
 
 #endif /*  PC60_TAPE_H */

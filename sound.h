@@ -35,6 +35,7 @@ typedef struct
 	unsigned frame, next_frame;
 } sound_state_t;
 
+extern unsigned sample_rate;
 extern SNDFRAME *sound_buffer;
 extern unsigned long bufferFrames;
 

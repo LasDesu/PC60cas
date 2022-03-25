@@ -17,17 +17,17 @@ static int sound_pulse_init()
 
 	ss.format = PA_SAMPLE_S16NE;
 	ss.channels = 2;
-	ss.rate = 48000;
+	ss.rate = sample_rate;
 
 	setenv("PULSE_PROP_media.role", "game", 1);
 
 	ba.minreq = -1;
 	ba.maxlength = -1;
 	ba.prebuf = -1;
-	ba.tlength = ss.rate / emu_frame_rate;
+	ba.tlength = ss.rate;
 
 	s = pa_simple_new(NULL,				// Use the default server.
-				   "PerfectZX", 		// Our application's name.
+				   "umachines cassette", 		// Our application's name.
 				   PA_STREAM_PLAYBACK,
 				   NULL,			 	// Use the default device.
 				   "Sound",				// Description of our stream.
@@ -39,8 +39,9 @@ static int sound_pulse_init()
 	if ( !s )
 		return -1;
 
-	bufferFrames = ss.rate / emu_frame_rate;
+	bufferFrames = ba.tlength;
 	sound_buffer = calloc( bufferFrames, sizeof(SNDFRAME) );
+	sample_rate = ss.rate;
 
 	return 0;
 }
