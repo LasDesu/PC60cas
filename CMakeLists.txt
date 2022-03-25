@@ -12,6 +12,7 @@ add_executable(zxcas
 	sound.c
 	formats/tap.c
 	formats/tzx.c
+	formats/pc60_cas.c
 	${AUDIOOUT_SRCS}
 )
 

@@ -29,5 +29,6 @@ void emu_tape_add( struct emu_tape_block *blk );
 int load_tap( const char *flname );
 int load_tzx( const char *flname );
 int load_wav( const char *flname );
+int load_pc60cas( const char *flname );
 
 #endif /* FORMATS_TAPE_H */

@@ -168,6 +168,8 @@ int main( int argc, char *argv[] )
 				filetype = 0;
 			else if ( strcasecmp( ext, "tzx" ) == 0 )
 				filetype = 1;
+			else if ( strcasecmp( ext, "cas" ) == 0 )
+				filetype = 2;
 		}
 		
 		if ( filetype < 0 )
@@ -187,6 +189,10 @@ int main( int argc, char *argv[] )
 		case 1:
 			printf( "Processing TZX file...\n" );
 			load_tzx( infile );
+			break;
+		case 2:
+			printf( "Processing PC60 cas file...\n" );
+			load_pc60cas( infile );
 			break;
 		default:
 			fprintf( stderr, "File type not yet supported.\n" );
