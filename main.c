@@ -30,8 +30,9 @@ struct tape_block *tape_std_block()
 	block->baud = baud;
 
 	block->silence = 500;
-	block->pilot = 4000;
-	block->tail = 10;
+	block->pilot = 4808;
+	block->tail = 100;
+	block->stopbits = 3;
 
 	return block;
 }
@@ -99,6 +100,9 @@ static int process_options( int argc, char *argv[] )
 			case 's':
 				square = 1;
 				break;
+			/*case 'b':
+				add_block( strtol( optarg, NULL, 0 ) );
+				break;*/
 		}
 	}
 

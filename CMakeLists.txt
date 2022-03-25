@@ -4,7 +4,7 @@ project(PC60cas C)
 
 add_executable(pc60cas
 	main.c
-	basic.c
+	cas.c
 	sound.c
 	tape.h
 )

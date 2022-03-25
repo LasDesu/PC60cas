@@ -60,7 +60,7 @@ static void generate_tone( struct audio_render *render, float length, unsigned f
 #define TONE_ZERO	(baud)
 #define TONE_ONE	((baud) * 2)
 
-static void generate_byte( struct audio_render *render, unsigned char data, unsigned baud )
+static void generate_byte( struct audio_render *render, unsigned char data, unsigned baud, unsigned stopbits )
 {
 	float period = 1000.0 / baud;
 	int i;
@@ -75,7 +75,7 @@ static void generate_byte( struct audio_render *render, unsigned char data, unsi
 	}
 
 	/* stop bits */
-	generate_tone( render, period * 3, TONE_ONE );
+	generate_tone( render, period * stopbits, TONE_ONE );
 }
 
 static void process_block( struct audio_render *render, struct tape_block *block )
@@ -89,7 +89,7 @@ static void process_block( struct audio_render *render, struct tape_block *block
 
 	/* data */
 	for ( i = 0; i < block->size; i ++ )
-		generate_byte( render, block->data[i], block->baud );
+		generate_byte( render, block->data[i], block->baud, block->stopbits + (i & 1 ? 1 : 0) );
 
 	/* tail */
 	generate_tone( render, block->tail, block->baud * 2 );

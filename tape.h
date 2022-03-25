@@ -15,6 +15,7 @@ struct tape_block
 	unsigned silence;
 	unsigned pilot;
 	unsigned tail;
+	unsigned stopbits;
 };
 
 struct audio_render
