@@ -10,9 +10,10 @@ include_directories(${CMAKE_SOURCE_DIR})
 add_executable(pc60cas
 	main.c
 	sound.c
-	formats/tap.c
-	formats/tzx.c
+	formats/zx_tap.c
+	formats/zx_tzx.c
 	formats/pc60_cas.c
+	formats/bk_bin.c
 	${AUDIOOUT_SRCS}
 )
 

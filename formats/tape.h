@@ -26,9 +26,10 @@ extern int (*tape_signal)( void );
 void emu_tape_clear();
 void emu_tape_add( struct emu_tape_block *blk );
 
-int load_tap( const char *flname );
-int load_tzx( const char *flname );
-int load_wav( const char *flname );
+//int load_wav( const char *flname );
+int load_zxtap( const char *flname );
+int load_zxtzx( const char *flname );
 int load_pc60cas( const char *flname );
+int load_bkbin( const char *flname );
 
 #endif /* FORMATS_TAPE_H */

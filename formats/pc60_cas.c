@@ -117,8 +117,8 @@ static int pc60_step( struct emu_tape_block *blk )
 			b->signal = 0;
 			b->state ++;
 			b->state_pos = b->stopbits * 4 - 1;
-			if ( (b->pos & 1) == 0 )
-				b->state_pos += 4;
+			if ( (b->pos & 15) == 0 )
+				b->state_pos += 30;
 			return b->ts_one;
 		case 10:
 			b->signal = !b->signal;
@@ -395,7 +395,7 @@ static int parse_raw_block( const unsigned char *data, long size )
 	block->data = data;
 	block->size = size;
 	strcpy( block->name, "RAW" );
-	//block->stopbits = 6;
+	//block->stopbits = 10;
 	
 	/* try to find a lot of zeroes, possibly we'll find known block */
 	i = 0;
@@ -425,7 +425,7 @@ static int parse_raw_block( const unsigned char *data, long size )
 	return 0;
 }
 
-int process_basic( const unsigned char *data, long size )
+static int process_basic( const unsigned char *data, long size )
 {
 	long pos;
 	int type;
@@ -466,7 +466,7 @@ int process_basic( const unsigned char *data, long size )
 	return 0;
 }
 
-int process_raw( const unsigned char *data, long size )
+static int process_raw( const unsigned char *data, long size )
 {
 	struct pc60_block *block;
 	

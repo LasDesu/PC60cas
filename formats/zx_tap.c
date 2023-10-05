@@ -187,7 +187,7 @@ static int process_tap_blocks( struct tap_file *file )
 	return 0;
 }
 
-int load_tap( const char *flname )
+int load_zxtap( const char *flname )
 {
 	FILE *fp;
 

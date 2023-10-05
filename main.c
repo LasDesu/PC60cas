@@ -167,6 +167,8 @@ int main( int argc, char *argv[] )
 				filetype = 1;
 			else if ( strcasecmp( ext, "cas" ) == 0 )
 				filetype = 2;
+			else if ( strcasecmp( ext, "bin" ) == 0 )
+				filetype = 3;
 		}
 		
 		if ( filetype < 0 )
@@ -181,15 +183,19 @@ int main( int argc, char *argv[] )
 	{
 		case 0:
 			printf( "Processing TAP file...\n" );
-			load_tap( infile );
+			load_zxtap( infile );
 			break;
 		case 1:
 			printf( "Processing TZX file...\n" );
-			load_tzx( infile );
+			load_zxtzx( infile );
 			break;
 		case 2:
 			printf( "Processing PC60 cas file...\n" );
 			load_pc60cas( infile );
+			break;
+		case 3:
+			printf( "Processing BK-001x bin file...\n" );
+			load_bkbin( infile );
 			break;
 		default:
 			fprintf( stderr, "File type not yet supported.\n" );

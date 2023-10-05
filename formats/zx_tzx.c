@@ -41,7 +41,7 @@ union tzx_block
 	{
 		uint8_t id;
 		uint8_t pulses;
-		uint16_t length[0];
+		uint16_t lengths[0];
 	} b13;
 	struct
 	{
@@ -228,10 +228,13 @@ static int process_stdblk( struct emu_tape_block *blk )
 			break;
 
 		case 4:
+			tape_state.signal = !tape_state.signal;
+			tape_state.state ++;
+		case 5:
 			if ( tape_state.pos >= b->size )
 			{
-				tape_state.signal = !tape_state.signal;
-				next_change = cpu_tstates_frame * 50 * b->pause / 1000;
+				//tape_state.signal = !tape_state.signal;
+				next_change = cpu_tstates_frame * b->pause * 50ULL / 1000;
 				tape_state.state = 9;
 				printf( "tape pause: %g sec\n", b->pause / 1000.0 );
 				break;
@@ -239,10 +242,11 @@ static int process_stdblk( struct emu_tape_block *blk )
 
 			tape_state.state_pos = 0;
 			tape_state.state ++;
+			break;
 
-		case 5:
-		case 6:
+		case 7:
 			tape_state.signal = !tape_state.signal;
+		case 6:
 			if ( b->data[tape_state.pos] & (1 << (7-tape_state.state_pos)) )
 				next_change = b->one;
 			else
@@ -251,17 +255,18 @@ static int process_stdblk( struct emu_tape_block *blk )
 			tape_state.state ++;
 			break;
 
-		case 7:
+		case 8:
+			tape_state.signal = !tape_state.signal;
 			tape_state.state_pos ++;
 			if ( (tape_state.state_pos >= 8) ||
 				 ((tape_state.pos == (b->size - 1)) &&
 				 (tape_state.state_pos >= b->last_bits)) )
 			{
-				tape_state.state = 4;
+				tape_state.state = 5;
 				tape_state.pos ++;
 			}
 			else
-				tape_state.state = 5;
+				tape_state.state = 6;
 			break;
 
 		case 9:
@@ -276,7 +281,8 @@ static int process_generator( struct emu_tape_block *blk )
 {
 	struct tzx_generator_block *b = (struct tzx_generator_block *)blk;
 
-	tape_state.signal = !tape_state.signal;
+	if ( tape_state.pos > 0 )
+		tape_state.signal = !tape_state.signal;
 	if ( (tape_state.pos ++) < b->num )
 		return b->length;
 
@@ -287,7 +293,8 @@ static int process_pulses( struct emu_tape_block *blk )
 {
 	struct tzx_pulse_block *b = (struct tzx_pulse_block *)blk;
 
-	tape_state.signal = !tape_state.signal;
+	if ( tape_state.pos > 0 )
+		tape_state.signal = !tape_state.signal;
 	if ( tape_state.pos < b->pulses )
 		return EMU_LE16(b->data[tape_state.pos ++]);
 
@@ -381,6 +388,7 @@ static struct emu_tape_block *process_b12()
 
 	blk->length = EMU_LE16(tape_state.block->b12.length);
 	blk->num = EMU_LE16(tape_state.block->b12.num);
+	printf( "tzx tone %uts x%u\n", blk->length, blk->num );
 
 	return &blk->base;
 }
@@ -396,10 +404,11 @@ static struct emu_tape_block *process_b13()
 	blk->base.step = process_pulses;
 	blk->base.signal = signal_tzx;
 
-	tape_state.next += sizeof( tape_state.block->b13 ) + tape_state.block->b13.pulses * 2;
-
 	blk->pulses = tape_state.block->b13.pulses;
-	blk->data = tape_state.block->b13.length;
+	blk->data = tape_state.block->b13.lengths;
+	printf( "tzx pulses %d\n", blk->pulses );
+
+	tape_state.next += sizeof( tape_state.block->b13 ) + blk->pulses * 2;
 
 	return &blk->base;
 }
@@ -426,6 +435,7 @@ static struct emu_tape_block *process_b14()
 	blk->one = EMU_LE16(tape_state.block->b14.one);
 	blk->last_bits = tape_state.block->b14.last_bits;
 	blk->pause = EMU_LE16(tape_state.block->b14.pause);
+	printf( "tzx raw data, pause %d\n", blk->pause );
 
 	tape_state.next += sizeof( tape_state.block->b14 ) + blk->size;
 
@@ -456,7 +466,7 @@ static struct emu_tape_block *process_b20()
 static struct emu_tape_block *process_b21()
 {
 	tape_state.next += sizeof( tape_state.block->b21 ) + tape_state.block->b21.length;
-	printf( "tzx group\n" );
+	printf( "tzx group '%.*s'\n", tape_state.block->b21.length, tape_state.block->b21.name );
 	return NULL;
 }
 
@@ -479,7 +489,7 @@ static struct emu_tape_block *process_b24()
 	tape_state.next += sizeof( tape_state.block->b24 );
 	tape_state.loop.start = tape_state.next;
 	tape_state.loop.num = EMU_LE16(tape_state.block->b24.num);
-	printf( "tzx loop start\n" );
+	printf( "tzx loop start (%u times)\n", tape_state.loop.num );
 	return NULL;
 }
 
@@ -487,7 +497,7 @@ static struct emu_tape_block *process_b25()
 {
 	tape_state.next += 1;
 
-	if ( tape_state.loop.start && (-- tape_state.loop.num) )
+	if ( tape_state.loop.start && (tape_state.loop.num --) )
 	{
 		tape_state.next = tape_state.loop.start;
 		printf( "tzx loop left=%d\n", tape_state.loop.num );
@@ -521,9 +531,8 @@ static struct emu_tape_block *process_b31()
 
 	tape_state.next += sizeof( tape_state.block->b31 ) + tape_state.block->b31.length;
 
-	printf( "tzx message (%d sec): ", tape_state.block->b31.time );
-	fwrite( tape_state.block->b31.text, 1, tape_state.block->b31.length, stdout );
-	printf( "\n" );
+	printf( "tzx message (%d sec): %.*s\n", tape_state.block->b31.time,
+		tape_state.block->b31.length, tape_state.block->b31.text );
 	blk->pause = cpu_tstates_frame * 50 * tape_state.block->b31.time / 1000;
 
 	return &blk->base;
@@ -586,7 +595,7 @@ static int process_tzx_blocks( struct tzx_file *file )
 	return 0;
 }
 
-int load_tzx( const char *flname )
+int load_zxtzx( const char *flname )
 {
 	FILE *fp;
 	char tmp[8] = { 0 };
