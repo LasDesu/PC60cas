@@ -48,7 +48,7 @@ static void bk_prepare( struct emu_tape_block *blk )
 
 	b->ts_zero = cpu_tstates_frame * emu_frame_rate / (b->baud / 2) * 1;
 	b->ts_one = cpu_tstates_frame * emu_frame_rate / (b->baud / 2) * 2;
-	b->ts_sync = cpu_tstates_frame * emu_frame_rate / (b->baud / 2) * 3;
+	b->ts_sync = cpu_tstates_frame * emu_frame_rate / (b->baud / 2) * 4;
 }
 
 static int bk_pilot_step( struct emu_tape_block *blk )
@@ -190,19 +190,30 @@ int process_bin( const unsigned char *data, long size, const char *flname )
 	
 	/* check file here */
 	if ( size < 6 )
+	{
+		fprintf( stderr, "Too small file\n" );
 		return -1;
+	}
 
 	dsize = data[2] | (data[3] << 8);
 	if ( dsize != size - 4 )
-		return -1;
+	{
+		fprintf( stderr, "Data size mismatch: %u in header, %ld in file\n", dsize, size - 4 );
+		if ( dsize < size - 4 )
+			printf( "Using size from header\n" );
+		else
+			return -1;
+	}
 
 	hdr = calloc( 1, 20 );
 	cksumbuf = calloc( 1, 2 );
 	
-	/* produce name */
+	/* make header */
 	memcpy( hdr, data, 4 );
+	/* produce name */
 	strncpy( hdr + 4, flname, 16 );
 	drop = 0;
+	printf( "Using name: '" );
 	for ( i = 4; i < 20; i ++ )
 	{
 		if ( hdr[i] == '\0' )
@@ -213,8 +224,12 @@ int process_bin( const unsigned char *data, long size, const char *flname )
 		if ( drop || hdr[i] < ' ' )
 			hdr[i] = ' ';
 		else
+		{
 			hdr[i] = toupper( hdr[i] );
+			printf( "%c", hdr[i] );
+		}
 	}
+	printf( "'\n" );
 
 	data += 4;
 

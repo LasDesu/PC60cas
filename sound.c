@@ -235,8 +235,10 @@ void play_tape( struct emu_tape_block *block )
 
 	render.out = &sound_pulse;
 
+	printf( "Playing tape\n" );
+
 	if ( render.out->init )
-		render.out->init();	
+		render.out->init();
 
 	while ( block )
 	{
@@ -245,7 +247,7 @@ void play_tape( struct emu_tape_block *block )
 	}
 
 	if ( render.out->flush )
-		render.out->flush();	
+		render.out->flush();
 	if ( render.out->uninit )
 		render.out->uninit();
 }

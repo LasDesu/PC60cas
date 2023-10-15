@@ -209,6 +209,7 @@ int main( int argc, char *argv[] )
 		goto out;
 	}
 
+	printf( "Tape file processed\n" );
 	if ( !play )
 		produce_wav( outfile, emu_tape_blocks );
 	else
